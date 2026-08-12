@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:camera/camera.dart';
 import 'package:encrypted_files/core/exceptions.dart';
@@ -61,7 +60,7 @@ class CaptureService {
     final controller = CameraController(
       _cameras[index % _cameras.length],
       ResolutionPreset.high,
-      enableAudio: false,
+      enableAudio: true,
       imageFormatGroup: ImageFormatGroup.jpeg,
     );
     await controller.initialize();
@@ -75,7 +74,10 @@ class CaptureService {
   }
 
   /// Capture a single photo and encrypt it to [destDir].
-  Future<EncryptedFileRef> capturePhoto({required String destDir}) async {
+  Future<EncryptedFileRef> capturePhoto({
+    required String destDir,
+    String? folderId,
+  }) async {
     final controller = _cameraController;
     if (controller == null || !controller.value.isInitialized) {
       throw EfIoException('Camera not initialized');
@@ -100,6 +102,7 @@ class CaptureService {
         mimeType: 'image/jpeg',
         destDir: destDir,
         session: session,
+        folderId: folderId,
       );
       await logs.info('CaptureService', 'Photo captured → ${ref.fakeName}');
       return ref;
@@ -130,6 +133,13 @@ class CaptureService {
 
   /// Stop audio recording and encrypt the captured audio.
   Future<EncryptedFileRef?> stopAudioRecording({required String destDir}) async {
+    return stopAudioRecordingToFolder(destDir: destDir);
+  }
+
+  Future<EncryptedFileRef?> stopAudioRecordingToFolder({
+    required String destDir,
+    String? folderId,
+  }) async {
     final session = passwordVault.active;
     if (session == null) throw EfAuthException('No active password session');
 
@@ -141,47 +151,18 @@ class CaptureService {
 
     try {
       final realName = 'audio_${DateTime.now().millisecondsSinceEpoch}.m4a';
-      final fileId = _uuid.v4();
-      final fileIdBytes = _uuidToBytes(fileId);
-      final blindTag = crypto.fileBlindTag(session.keys, fileId: fileIdBytes);
-      final storedFakeName = '${_uuid.v4()}.m4a';
-      final outputPath = p.join(destDir, storedFakeName);
-
-      await Directory(destDir).create(recursive: true);
-      await crypto.encryptFile(
+      final ref = await _encryptFile(
         inputPath: path,
-        outputPath: outputPath,
-        keys: session.keys,
         realName: realName,
         mimeType: 'audio/mp4',
-        fileBlindTag: blindTag,
-        chunkSize: settings.chunkBytes,
-      );
-
-      final sizeBytes = await tempFile.length();
-      final realNameEnc = Uint8List.fromList(passwordVault.encryptMetadata(realName));
-      final mimeEnc = Uint8List.fromList(passwordVault.encryptMetadata('audio/mp4'));
-      final now = DateTime.now().toUtc();
-
-      final ref = EncryptedFileRef(
-        id: fileId,
-        vaultId: session.vault.id,
-        diskPath: outputPath,
-        fakeName: storedFakeName,
-        realNameEncrypted: realNameEnc,
-        mimeEncrypted: mimeEnc,
-        fileBlindTag: Uint8List.fromList(blindTag),
-        sizeBytes: sizeBytes,
-        folderId: null,
-        sortIndex: 0,
-        createdAt: now,
-        modifiedAt: now,
-        realName: realName,
-        mimeType: 'audio/mp4',
+        fakeExtension: '.m4a',
+        destDir: destDir,
+        session: session,
+        folderId: folderId,
       );
 
       await database.insertFileRef(ref);
-      await logs.info('CaptureService', 'Audio captured → $storedFakeName');
+      await logs.info('CaptureService', 'Audio captured -> ${ref.fakeName}');
       return ref;
     } finally {
       try {
@@ -192,12 +173,62 @@ class CaptureService {
 
   Future<void> disposeAudio() => _audioRecorder.dispose();
 
+  Future<void> startVideoRecording() async {
+    final controller = _cameraController;
+    if (controller == null || !controller.value.isInitialized) {
+      throw EfIoException('Camera not initialized');
+    }
+    if (controller.value.isRecordingVideo) return;
+    await controller.startVideoRecording();
+    await logs.debug('CaptureService', 'Video recording started');
+  }
+
+  Future<bool> get isRecordingVideo async {
+    final controller = _cameraController;
+    return controller?.value.isRecordingVideo ?? false;
+  }
+
+  Future<EncryptedFileRef?> stopVideoRecording({
+    required String destDir,
+    String? folderId,
+  }) async {
+    final controller = _cameraController;
+    if (controller == null || !controller.value.isRecordingVideo) return null;
+    final session = passwordVault.active;
+    if (session == null) throw EfAuthException('No active password session');
+
+    final xFile = await controller.stopVideoRecording();
+    final tempFile = File(xFile.path);
+    if (!await tempFile.exists()) return null;
+
+    try {
+      final realName = 'video_${DateTime.now().millisecondsSinceEpoch}.mp4';
+      final ref = await _encryptFile(
+        inputPath: xFile.path,
+        realName: realName,
+        mimeType: 'video/mp4',
+        fakeExtension: '.mp4',
+        destDir: destDir,
+        session: session,
+        folderId: folderId,
+      );
+      await database.insertFileRef(ref);
+      await logs.info('CaptureService', 'Video captured -> ${ref.fakeName}');
+      return ref;
+    } finally {
+      try {
+        await tempFile.delete();
+      } catch (_) {}
+    }
+  }
+
   Future<EncryptedFileRef> _encryptBytes({
     required Uint8List bytes,
     required String realName,
     required String mimeType,
     required String destDir,
     required ActiveSession session,
+    String? folderId,
   }) async {
     final fileId = _uuid.v4();
     final fileIdBytes = _uuidToBytes(fileId);
@@ -230,7 +261,7 @@ class CaptureService {
       mimeEncrypted: mimeEnc,
       fileBlindTag: Uint8List.fromList(blindTag),
       sizeBytes: bytes.length,
-      folderId: null,
+      folderId: folderId,
       sortIndex: 0,
       createdAt: now,
       modifiedAt: now,
@@ -240,6 +271,52 @@ class CaptureService {
 
     await database.insertFileRef(ref);
     return ref;
+  }
+
+  Future<EncryptedFileRef> _encryptFile({
+    required String inputPath,
+    required String realName,
+    required String mimeType,
+    required String fakeExtension,
+    required String destDir,
+    required ActiveSession session,
+    String? folderId,
+  }) async {
+    final fileId = _uuid.v4();
+    final fileIdBytes = _uuidToBytes(fileId);
+    final blindTag = crypto.fileBlindTag(session.keys, fileId: fileIdBytes);
+    final storedFakeName = '${_uuid.v4()}$fakeExtension';
+    final outputPath = p.join(destDir, storedFakeName);
+
+    await Directory(destDir).create(recursive: true);
+    await crypto.encryptFile(
+      inputPath: inputPath,
+      outputPath: outputPath,
+      keys: session.keys,
+      realName: realName,
+      mimeType: mimeType,
+      fileBlindTag: blindTag,
+      chunkSize: settings.chunkBytes,
+    );
+
+    final sizeBytes = await File(inputPath).length();
+    final now = DateTime.now().toUtc();
+    return EncryptedFileRef(
+      id: fileId,
+      vaultId: session.vault.id,
+      diskPath: outputPath,
+      fakeName: storedFakeName,
+      realNameEncrypted: Uint8List.fromList(passwordVault.encryptMetadata(realName)),
+      mimeEncrypted: Uint8List.fromList(passwordVault.encryptMetadata(mimeType)),
+      fileBlindTag: Uint8List.fromList(blindTag),
+      sizeBytes: sizeBytes,
+      folderId: folderId,
+      sortIndex: 0,
+      createdAt: now,
+      modifiedAt: now,
+      realName: realName,
+      mimeType: mimeType,
+    );
   }
 
   Uint8List _uuidToBytes(String uuid) {

@@ -244,10 +244,6 @@ static void handle_client(EfStreamServer *server, ef_sock_t client) {
     return;
   }
 
-  if (server->chunk_override > 0 && server->chunk_override < chunk) {
-    /* Override only shrinks read buffer usage via decrypt update out_cap. */
-  }
-
   uint32_t use_chunk = chunk;
   if (server->chunk_override > 0) {
     use_chunk = server->chunk_override;

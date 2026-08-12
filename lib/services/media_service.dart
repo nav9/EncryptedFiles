@@ -1,4 +1,3 @@
-import 'package:encrypted_files/core/exceptions.dart';
 import 'package:encrypted_files/database/models/encrypted_file_ref.dart';
 import 'package:encrypted_files/services/log_service.dart';
 import 'package:encrypted_files/streaming/stream_server_service.dart';

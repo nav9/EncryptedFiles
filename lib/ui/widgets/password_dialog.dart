@@ -83,9 +83,14 @@ class _PasswordDialogState extends State<PasswordDialog> {
     });
 
     try {
-      // Create the vault (or unlock if it exists). This also creates the decoy
-      // vault if a decoy password is provided.
+      // Unlock the vault (or create it on first launch). This also creates the
+      // decoy vault if a decoy password is provided.
       final session = await AppDi.passwordVault.unlockOrCreate(mainPw);
+
+      if (session == null) {
+        _startDelay('Unrecognized password. Please try again.');
+        return;
+      }
 
       if (decoyPw != null && decoyPw.isNotEmpty) {
         // Spin up the decoy vault in background; errors are non-fatal.

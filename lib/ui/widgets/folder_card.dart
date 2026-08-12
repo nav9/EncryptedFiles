@@ -35,10 +35,19 @@ class FolderCard extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Checkbox(
-                value: isSelected,
-                onChanged: onCheckChanged,
-                visualDensity: VisualDensity.compact,
+              SizedBox(
+                width: 42,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Checkbox(
+                      value: isSelected,
+                      onChanged: onCheckChanged,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    const Icon(Icons.drag_handle, size: 18),
+                  ],
+                ),
               ),
               Icon(Icons.folder_outlined,
                   color: Colors.amber, size: 28),
@@ -63,7 +72,6 @@ class FolderCard extends StatelessWidget {
                 ),
               ),
               const Icon(Icons.chevron_right),
-              const Icon(Icons.drag_handle, size: 18),
             ],
           ),
         ),

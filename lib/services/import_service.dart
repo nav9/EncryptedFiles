@@ -1,7 +1,5 @@
 import 'dart:io';
-import 'dart:typed_data';
 
-import 'package:encrypted_files/core/constants.dart';
 import 'package:encrypted_files/core/exceptions.dart';
 import 'package:encrypted_files/crypto/crypto_service.dart';
 import 'package:encrypted_files/crypto/password_vault.dart';

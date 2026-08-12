@@ -18,6 +18,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late int _chunkBytes;
   late bool _autoChunk;
   late bool _isDark;
+  late int _slideshowSeconds;
+  late bool _cameraAutoRecord;
   int _suggestedChunk = AppConstants.defaultChunkBytes;
 
   @override
@@ -26,6 +28,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _chunkBytes = AppDi.settings.chunkBytes;
     _autoChunk = AppDi.settings.autoSuggestChunk;
     _isDark = AppDi.settings.isDarkTheme;
+    _slideshowSeconds = AppDi.settings.slideshowSeconds;
+    _cameraAutoRecord = AppDi.settings.cameraAutoRecord;
     _computeSuggested();
   }
 
@@ -52,8 +56,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        leadingWidth: 96,
+        leading: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const LockAllButton(),
+            IconButton(
+              icon: const Icon(Icons.arrow_back),
+              tooltip: 'Back',
+              onPressed: () => Navigator.pop(context),
+            ),
+          ],
+        ),
         title: const Text('Settings'),
-        actions: const [LockAllButton()],
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -68,6 +83,92 @@ class _SettingsScreenState extends State<SettingsScreen> {
               setState(() => _isDark = v);
               await state.setDarkTheme(v);
             },
+          ),
+
+          const Divider(),
+          _Section('Vault Screen'),
+          ListTile(
+            leading: const Icon(Icons.slideshow_outlined),
+            title: const Text('Slideshow interval'),
+            subtitle: Text('$_slideshowSeconds seconds per image'),
+            trailing: SizedBox(
+              width: 96,
+              child: DropdownButtonFormField<int>(
+                initialValue: _slideshowSeconds,
+                items: const [2, 4, 6, 8, 10, 15, 30]
+                    .map(
+                      (s) => DropdownMenuItem(
+                        value: s,
+                        child: Text('${s}s'),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (v) async {
+                  if (v == null) return;
+                  setState(() => _slideshowSeconds = v);
+                  await AppDi.settings.setSlideshowSeconds(v);
+                },
+              ),
+            ),
+          ),
+          SwitchListTile(
+            secondary: const Icon(Icons.videocam_outlined),
+            title: const Text('Start video recording immediately'),
+            subtitle: const Text('Applies when opening Camera from a vault'),
+            value: _cameraAutoRecord,
+            onChanged: (v) async {
+              setState(() => _cameraAutoRecord = v);
+              await AppDi.settings.setCameraAutoRecord(v);
+            },
+          ),
+
+          const Divider(),
+          _Section('Navigation Bar'),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: Text('Drag to reorder icons on the main screen:'),
+          ),
+          ReorderableListView(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            onReorder: (oldIndex, newIndex) async {
+              setState(() {
+                if (newIndex > oldIndex) {
+                  newIndex -= 1;
+                }
+                final item = AppDi.settings.navBarIcons.removeAt(oldIndex);
+                AppDi.settings.navBarIcons.insert(newIndex, item);
+              });
+              await AppDi.settings.setNavBarIcons(AppDi.settings.navBarIcons);
+              // Notify app state about change if needed, but setState rebuilds.
+            },
+            children: AppDi.settings.navBarIcons.map((iconId) {
+              IconData iconData;
+              String title;
+              switch (iconId) {
+                case 'import':
+                  iconData = Icons.file_upload_outlined;
+                  title = 'Import';
+                  break;
+                case 'camera':
+                  iconData = Icons.camera_alt_outlined;
+                  title = 'Camera';
+                  break;
+                case 'mic':
+                  iconData = Icons.mic_none;
+                  title = 'Microphone';
+                  break;
+                default:
+                  iconData = Icons.device_unknown;
+                  title = iconId;
+              }
+              return ListTile(
+                key: ValueKey(iconId),
+                leading: Icon(iconData),
+                title: Text(title),
+                trailing: const Icon(Icons.drag_handle),
+              );
+            }).toList(),
           ),
 
           const Divider(),
@@ -98,7 +199,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: DropdownButtonFormField<int>(
                 decoration: const InputDecoration(labelText: 'Chunk size'),
-                value: AppConstants.allowedChunkSizes.contains(_chunkBytes)
+                initialValue: AppConstants.allowedChunkSizes.contains(_chunkBytes)
                     ? _chunkBytes
                     : AppConstants.defaultChunkBytes,
                 items: AppConstants.allowedChunkSizes.map((s) {
@@ -122,7 +223,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: DropdownButtonFormField<int>(
               decoration: const InputDecoration(
                   labelText: 'Streaming chunk override (0 = file header)'),
-              value: AppConstants.allowedChunkSizes
+              initialValue: AppConstants.allowedChunkSizes
                       .contains(AppDi.settings.streamChunkOverride)
                   ? AppDi.settings.streamChunkOverride
                   : 0,

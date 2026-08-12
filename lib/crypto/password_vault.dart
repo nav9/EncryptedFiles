@@ -126,12 +126,20 @@ class PasswordVault {
     }
   }
 
-  Future<ActiveSession> unlockOrCreate(String password) async {
+  /// Unlock with [password], or create the initial vault on first launch
+  /// (when no vault exists yet). If vaults already exist and the password does
+  /// not match any of them, returns null so the UI can show the anti-brute-
+  /// force "unrecognized password" delay instead of silently creating a vault.
+  Future<ActiveSession?> unlockOrCreate(String password) async {
     final existing = await unlock(password);
     if (existing != null) {
       return existing;
     }
-    return createVault(password);
+    final vaults = await _db.listVaults();
+    if (vaults.isEmpty) {
+      return createVault(password);
+    }
+    return null;
   }
 
   Future<void> clearActive() async {

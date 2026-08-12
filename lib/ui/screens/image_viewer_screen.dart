@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:encrypted_files/core/di.dart';
 import 'package:encrypted_files/database/models/encrypted_file_ref.dart';
+import 'package:encrypted_files/ui/widgets/lock_all_button.dart';
 import 'package:flutter/material.dart';
 
 /// Image viewer with optional slideshow mode.
@@ -15,7 +16,7 @@ class ImageViewerScreen extends StatefulWidget {
     required this.images,
     this.initialIndex = 0,
     this.slideshowMode = false,
-    this.slideshowIntervalSec = 5,
+    this.slideshowIntervalSec = 6,
   });
 
   final List<EncryptedFileRef> images;
@@ -59,7 +60,6 @@ class _ImageViewerScreenState extends State<ImageViewerScreen> {
             curve: Curves.easeInOut,
           );
         } else {
-          // Loop back
           _pageCtrl.animateToPage(
             0,
             duration: const Duration(milliseconds: 600),
@@ -112,6 +112,18 @@ class _ImageViewerScreenState extends State<ImageViewerScreen> {
       appBar: AppBar(
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
+        leadingWidth: 96,
+        leading: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const LockAllButton(),
+            IconButton(
+              icon: const Icon(Icons.arrow_back),
+              tooltip: 'Back',
+              onPressed: () => Navigator.pop(context),
+            ),
+          ],
+        ),
         title: Text(
           ref.realName ?? ref.fakeName,
           style: const TextStyle(fontSize: 14),
@@ -135,10 +147,6 @@ class _ImageViewerScreenState extends State<ImageViewerScreen> {
                 }
               });
             },
-          ),
-          IconButton(
-            icon: const Icon(Icons.close, color: Colors.white),
-            onPressed: () => Navigator.pop(context),
           ),
         ],
       ),
@@ -208,12 +216,16 @@ class _ImageViewerScreenState extends State<ImageViewerScreen> {
                 children: [
                   IconButton(
                     icon: const Icon(Icons.chevron_left, color: Colors.white),
-                    onPressed: _currentIndex > 0
-                        ? () => _pageCtrl.previousPage(
-                              duration: const Duration(milliseconds: 300),
-                              curve: Curves.easeInOut,
-                            )
-                        : null,
+                    onPressed: () {
+                      final target = _currentIndex == 0
+                          ? widget.images.length - 1
+                          : _currentIndex - 1;
+                      _pageCtrl.animateToPage(
+                        target,
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeInOut,
+                      );
+                    },
                   ),
                   Text(
                     '${_currentIndex + 1} / ${widget.images.length}',
@@ -222,12 +234,16 @@ class _ImageViewerScreenState extends State<ImageViewerScreen> {
                   IconButton(
                     icon:
                         const Icon(Icons.chevron_right, color: Colors.white),
-                    onPressed: _currentIndex < widget.images.length - 1
-                        ? () => _pageCtrl.nextPage(
-                              duration: const Duration(milliseconds: 300),
-                              curve: Curves.easeInOut,
-                            )
-                        : null,
+                    onPressed: () {
+                      final target = _currentIndex == widget.images.length - 1
+                          ? 0
+                          : _currentIndex + 1;
+                      _pageCtrl.animateToPage(
+                        target,
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeInOut,
+                      );
+                    },
                   ),
                 ],
               ),

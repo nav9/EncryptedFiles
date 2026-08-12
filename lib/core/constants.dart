@@ -3,7 +3,7 @@ class AppConstants {
   AppConstants._();
 
   static const String appName = 'EncryptedFiles';
-  static const String appFolderName = 'secure_media_files';
+  static const String appFolderName = 'encrypted_files';
   static const String databaseFileName = 'tracker.db';
   static const String lockFileName = 'app.lock';
   static const String logTableMaxRows = '500';

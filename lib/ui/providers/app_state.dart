@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:encrypted_files/core/constants.dart';
 import 'package:encrypted_files/crypto/password_vault.dart';
@@ -45,6 +44,13 @@ class AppState extends ChangeNotifier {
   /// Returns sub-folders of [parentId] (null = root folders).
   List<VirtualFolder> subFolders(String? parentId) =>
       _folders.where((f) => f.parentId == parentId).toList();
+
+  VirtualFolder? folderById(String id) {
+    for (final folder in _folders) {
+      if (folder.id == id) return folder;
+    }
+    return null;
+  }
 
   /// Load and decrypt metadata for all files/folders belonging to the
   /// current active session.
@@ -125,13 +131,8 @@ class AppState extends ChangeNotifier {
     List<EncryptedFileRef> target;
     List<EncryptedFileRef> others;
 
-    if (folderId != null) {
-      target = _fileRefs.where((f) => f.folderId == folderId).toList();
-      others = _fileRefs.where((f) => f.folderId != folderId).toList();
-    } else {
-      target = List.of(_fileRefs);
-      others = [];
-    }
+    target = _fileRefs.where((f) => f.folderId == folderId).toList();
+    others = _fileRefs.where((f) => f.folderId != folderId).toList();
 
     switch (mode) {
       case SortMode.nameAsc:
@@ -160,6 +161,38 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  void sortFolders(SortMode mode, {String? parentId}) {
+    final target = _folders.where((f) => f.parentId == parentId).toList();
+    final others = _folders.where((f) => f.parentId != parentId).toList();
+
+    switch (mode) {
+      case SortMode.nameAsc:
+        target.sort((a, b) =>
+            (a.name ?? '').toLowerCase().compareTo((b.name ?? '').toLowerCase()));
+      case SortMode.nameDesc:
+        target.sort((a, b) =>
+            (b.name ?? '').toLowerCase().compareTo((a.name ?? '').toLowerCase()));
+      case SortMode.createdAsc:
+        target.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      case SortMode.createdDesc:
+        target.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      case SortMode.modifiedAsc:
+        target.sort((a, b) => a.modifiedAt.compareTo(b.modifiedAt));
+      case SortMode.modifiedDesc:
+        target.sort((a, b) => b.modifiedAt.compareTo(a.modifiedAt));
+      case SortMode.manual:
+        target.sort((a, b) => a.sortIndex.compareTo(b.sortIndex));
+    }
+
+    _folders = [...others, ...target];
+    notifyListeners();
+  }
+
+  void sortCurrentView(SortMode mode, {String? folderId}) {
+    sortFolders(mode, parentId: folderId);
+    sortFiles(mode, folderId: folderId);
+  }
+
   /// Update a file ref in memory after a DB change.
   void updateRef(EncryptedFileRef updated) {
     final idx = _fileRefs.indexWhere((f) => f.id == updated.id);
@@ -186,8 +219,23 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  void updateFolder(VirtualFolder folder) {
+    final idx = _folders.indexWhere((f) => f.id == folder.id);
+    if (idx >= 0) {
+      _folders[idx] = folder;
+      notifyListeners();
+    }
+  }
+
   void removeFolder(String id) {
     _folders.removeWhere((f) => f.id == id);
+    notifyListeners();
+  }
+
+  void removeFolders(Iterable<String> ids) {
+    final set = ids.toSet();
+    _folders.removeWhere((f) => set.contains(f.id));
+    _fileRefs.removeWhere((f) => f.folderId != null && set.contains(f.folderId));
     notifyListeners();
   }
 

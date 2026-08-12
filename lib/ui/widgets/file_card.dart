@@ -38,11 +38,19 @@ class FileCard extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // Checkbox
-              Checkbox(
-                value: isSelected,
-                onChanged: onCheckChanged,
-                visualDensity: VisualDensity.compact,
+              SizedBox(
+                width: 42,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Checkbox(
+                      value: isSelected,
+                      onChanged: onCheckChanged,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    const Icon(Icons.drag_handle, size: 18),
+                  ],
+                ),
               ),
               // Icon
               _MediaIcon(kind: fileRef.mediaKind),
@@ -99,8 +107,6 @@ class FileCard extends StatelessWidget {
                   ],
                 ),
               ),
-              // Drag handle
-              const Icon(Icons.drag_handle, size: 18),
             ],
           ),
         ),

@@ -1,4 +1,3 @@
-import 'package:encrypted_files/ui/providers/app_state.dart';
 import 'package:encrypted_files/ui/widgets/lock_all_button.dart';
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -24,8 +23,19 @@ class _AboutScreenState extends State<AboutScreen> {
     final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
+        leadingWidth: 96,
+        leading: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const LockAllButton(),
+            IconButton(
+              icon: const Icon(Icons.arrow_back),
+              tooltip: 'Back',
+              onPressed: () => Navigator.pop(context),
+            ),
+          ],
+        ),
         title: const Text('About'),
-        actions: const [LockAllButton()],
       ),
       body: Padding(
         padding: const EdgeInsets.all(24),

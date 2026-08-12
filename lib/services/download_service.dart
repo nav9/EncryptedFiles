@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:encrypted_files/core/exceptions.dart';
 import 'package:encrypted_files/crypto/crypto_service.dart';
@@ -66,67 +65,76 @@ class DownloadService {
     await Directory(destDir).create(recursive: true);
 
     try {
-      final request = http.Request('GET', uri);
-      final response = await http.Client().send(request);
+      final client = http.Client();
+      try {
+        final request = http.Request('GET', uri);
+        final response = await client.send(request);
 
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw EfIoException('HTTP ${response.statusCode} for $url');
-      }
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          throw EfIoException('HTTP ${response.statusCode} for $url');
+        }
 
-      final total = response.contentLength ?? -1;
-      int received = 0;
+        final total = response.contentLength ?? -1;
+        int received = 0;
 
-      // We need total size for ef_encrypt_begin — stream size may be unknown.
-      // Strategy: if Content-Length is known, stream directly.
-      // Otherwise collect into a temp buffer (capped at available memory).
-      final chunkSize = settings.chunkBytes;
+        // We need total size for ef_encrypt_begin — stream size may be unknown.
+        // Strategy: if Content-Length is known, stream directly.
+        // Otherwise collect into a temp buffer (capped at available memory).
+        final chunkSize = settings.chunkBytes;
 
-      if (total > 0) {
-        // Known size: stream directly.
-        Stream<List<int>> source() async* {
+        if (total > 0) {
+          // Known size: stream directly.
+          Stream<List<int>> source() async* {
+            await for (final chunk in response.stream) {
+              if (_cancelled) break;
+              received += chunk.length;
+              onProgress?.call(received, total);
+              yield chunk;
+            }
+          }
+
+          await crypto.encryptStream(
+            outputPath: outputPath,
+            keys: session.keys,
+            realName: realName,
+            mimeType: mimeType,
+            fileBlindTag: blindTag,
+            chunkSize: chunkSize,
+            plaintextSize: total,
+            source: source(),
+          );
+
+          if (_cancelled) {
+            throw EfIoException('Download cancelled');
+          }
+        } else {
+          // Unknown size: accumulate chunks, then encrypt.
+          final bytes = <int>[];
           await for (final chunk in response.stream) {
             if (_cancelled) break;
+            bytes.addAll(chunk);
             received += chunk.length;
-            onProgress?.call(received, total);
-            yield chunk;
+            onProgress?.call(received, -1);
           }
-        }
 
-        await crypto.encryptStream(
-          outputPath: outputPath,
-          keys: session.keys,
-          realName: realName,
-          mimeType: mimeType,
-          fileBlindTag: blindTag,
-          chunkSize: chunkSize,
-          plaintextSize: total,
-          source: source(),
-        );
-      } else {
-        // Unknown size: accumulate chunks, then encrypt.
-        final bytes = <int>[];
-        await for (final chunk in response.stream) {
-          if (_cancelled) break;
-          bytes.addAll(chunk);
-          received += chunk.length;
-          onProgress?.call(received, -1);
-        }
+          if (_cancelled) {
+            throw EfIoException('Download cancelled');
+          }
 
-        if (_cancelled) {
-          throw EfIoException('Download cancelled');
+          final data = Uint8List.fromList(bytes);
+          await crypto.encryptStream(
+            outputPath: outputPath,
+            keys: session.keys,
+            realName: realName,
+            mimeType: mimeType,
+            fileBlindTag: blindTag,
+            chunkSize: chunkSize,
+            plaintextSize: data.length,
+            source: Stream.value(data),
+          );
         }
-
-        final data = Uint8List.fromList(bytes);
-        await crypto.encryptStream(
-          outputPath: outputPath,
-          keys: session.keys,
-          realName: realName,
-          mimeType: mimeType,
-          fileBlindTag: blindTag,
-          chunkSize: chunkSize,
-          plaintextSize: data.length,
-          source: Stream.value(data),
-        );
+      } finally {
+        client.close();
       }
     } catch (e, st) {
       debugPrint('DownloadService.downloadAndEncrypt failed: $e\n$st');

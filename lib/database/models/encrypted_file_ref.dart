@@ -84,12 +84,14 @@ class EncryptedFileRef extends Equatable {
     return MediaKind.other;
   }
 
+  static const Object _unset = Object();
+
   EncryptedFileRef copyWith({
     String? diskPath,
     String? fakeName,
     Uint8List? realNameEncrypted,
     Uint8List? mimeEncrypted,
-    String? folderId,
+    Object? folderId = _unset,
     int? sortIndex,
     DateTime? modifiedAt,
     String? realName,
@@ -106,7 +108,7 @@ class EncryptedFileRef extends Equatable {
       mimeEncrypted: mimeEncrypted ?? this.mimeEncrypted,
       fileBlindTag: fileBlindTag,
       sizeBytes: sizeBytes ?? this.sizeBytes,
-      folderId: folderId ?? this.folderId,
+      folderId: identical(folderId, _unset) ? this.folderId : folderId as String?,
       sortIndex: sortIndex ?? this.sortIndex,
       createdAt: createdAt,
       modifiedAt: modifiedAt ?? this.modifiedAt,

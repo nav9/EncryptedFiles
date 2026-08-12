@@ -1,6 +1,8 @@
+import 'dart:math';
+
 import 'package:encrypted_files/core/di.dart';
-import 'package:encrypted_files/core/exceptions.dart';
 import 'package:encrypted_files/database/models/encrypted_file_ref.dart';
+import 'package:encrypted_files/ui/widgets/lock_all_button.dart';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
@@ -27,6 +29,10 @@ class _MediaPlayerScreenState extends State<MediaPlayerScreen> {
   int _currentIndex = 0;
   bool _isMuted = false;
   double _volume = 1.0;
+  double _speed = 1.0;
+  bool _shuffle = false;
+  bool _repeat = false;
+  bool _showPlaylist = false;
   bool _loading = true;
   String? _error;
   String? _currentToken;
@@ -61,6 +67,8 @@ class _MediaPlayerScreenState extends State<MediaPlayerScreen> {
         _controller = ctrl;
         _loading = false;
       });
+      await ctrl.setPlaybackSpeed(_speed);
+      await ctrl.setVolume(_isMuted ? 0 : _volume);
       await ctrl.play();
     } catch (e) {
       setState(() {
@@ -93,17 +101,30 @@ class _MediaPlayerScreenState extends State<MediaPlayerScreen> {
   }
 
   Future<void> _previous() async {
-    if (_currentIndex > 0) {
-      _currentIndex--;
-      await _loadCurrent();
+    if (widget.playlist.isEmpty) return;
+    if (_shuffle) {
+      _currentIndex = Random().nextInt(widget.playlist.length);
+    } else {
+      _currentIndex =
+          _currentIndex == 0 ? widget.playlist.length - 1 : _currentIndex - 1;
     }
+    await _loadCurrent();
   }
 
   Future<void> _next() async {
-    if (_currentIndex < widget.playlist.length - 1) {
-      _currentIndex++;
-      await _loadCurrent();
+    if (widget.playlist.isEmpty) return;
+    if (_repeat) {
+      await _controller?.seekTo(Duration.zero);
+      await _controller?.play();
+      return;
     }
+    if (_shuffle) {
+      _currentIndex = Random().nextInt(widget.playlist.length);
+    } else {
+      _currentIndex =
+          _currentIndex == widget.playlist.length - 1 ? 0 : _currentIndex + 1;
+    }
+    await _loadCurrent();
   }
 
   @override
@@ -124,16 +145,30 @@ class _MediaPlayerScreenState extends State<MediaPlayerScreen> {
       appBar: AppBar(
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
+        leadingWidth: 96,
+        leading: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const LockAllButton(),
+            IconButton(
+              icon: const Icon(Icons.close),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ],
+        ),
         title: Text(
           ref.realName ?? ref.fakeName,
           style: const TextStyle(fontSize: 14),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
-        leading: IconButton(
-          icon: const Icon(Icons.close),
-          onPressed: () => Navigator.pop(context),
-        ),
+        actions: [
+          IconButton(
+            icon: Icon(_showPlaylist ? Icons.queue_music : Icons.queue_music_outlined),
+            tooltip: 'Playlist',
+            onPressed: () => setState(() => _showPlaylist = !_showPlaylist),
+          ),
+        ],
       ),
       body: Column(
         children: [
@@ -167,6 +202,31 @@ class _MediaPlayerScreenState extends State<MediaPlayerScreen> {
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
             child: Column(
               children: [
+                if (_showPlaylist)
+                  SizedBox(
+                    height: 96,
+                    child: ListView.builder(
+                      itemCount: widget.playlist.length,
+                      itemBuilder: (_, i) {
+                        final item = widget.playlist[i];
+                        return ListTile(
+                          dense: true,
+                          selected: i == _currentIndex,
+                          textColor: Colors.white70,
+                          selectedColor: Colors.white,
+                          title: Text(
+                            item.realName ?? item.fakeName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          onTap: () async {
+                            _currentIndex = i;
+                            await _loadCurrent();
+                          },
+                        );
+                      },
+                    ),
+                  ),
                 // Track title + index
                 Text(
                   '${_currentIndex + 1} / ${widget.playlist.length}  ·  ${ref.realName ?? ref.fakeName}',
@@ -210,7 +270,7 @@ class _MediaPlayerScreenState extends State<MediaPlayerScreen> {
                       icon: const Icon(Icons.skip_previous,
                           color: Colors.white),
                       iconSize: 32,
-                      onPressed: _currentIndex > 0 ? _previous : null,
+                      onPressed: widget.playlist.length > 1 ? _previous : null,
                     ),
                     IconButton(
                       icon: Icon(
@@ -231,10 +291,48 @@ class _MediaPlayerScreenState extends State<MediaPlayerScreen> {
                     IconButton(
                       icon: const Icon(Icons.skip_next, color: Colors.white),
                       iconSize: 32,
-                      onPressed:
-                          _currentIndex < widget.playlist.length - 1
-                              ? _next
-                              : null,
+                      onPressed: widget.playlist.length > 1 || _repeat ? _next : null,
+                    ),
+                  ],
+                ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    IconButton(
+                      icon: Icon(
+                        _shuffle ? Icons.shuffle_on_outlined : Icons.shuffle,
+                        color: _shuffle ? theme.colorScheme.primary : Colors.white70,
+                      ),
+                      tooltip: 'Shuffle',
+                      onPressed: () => setState(() => _shuffle = !_shuffle),
+                    ),
+                    IconButton(
+                      icon: Icon(
+                        _repeat ? Icons.repeat_on_outlined : Icons.repeat,
+                        color: _repeat ? theme.colorScheme.primary : Colors.white70,
+                      ),
+                      tooltip: 'Repeat current',
+                      onPressed: () => setState(() => _repeat = !_repeat),
+                    ),
+                    TextButton(
+                      onPressed: () async {
+                        final next = _speed <= 0.75 ? 1.0 : _speed - 0.25;
+                        setState(() => _speed = next);
+                        await ctrl?.setPlaybackSpeed(next);
+                      },
+                      child: const Text('- Speed'),
+                    ),
+                    Text(
+                      '${_speed.toStringAsFixed(2)}x',
+                      style: const TextStyle(color: Colors.white70),
+                    ),
+                    TextButton(
+                      onPressed: () async {
+                        final next = _speed >= 2.0 ? 2.0 : _speed + 0.25;
+                        setState(() => _speed = next);
+                        await ctrl?.setPlaybackSpeed(next);
+                      },
+                      child: const Text('+ Speed'),
                     ),
                   ],
                 ),

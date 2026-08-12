@@ -1,3 +1,10 @@
+/* POSIX declarations (fileno, fsync) under strict C11. */
+#if !defined(_WIN32) && !defined(EF_PLATFORM_WINDOWS)
+  #ifndef _POSIX_C_SOURCE
+    #define _POSIX_C_SOURCE 200809L
+  #endif
+#endif
+
 #include "encrypted_files.h"
 
 #include <stdio.h>
@@ -53,6 +60,8 @@ struct EfDecryptCtx {
   uint8_t *cipher_buf;
   uint8_t *plain_buf;
   size_t chunk_size;
+  size_t plain_buf_len;
+  size_t plain_buf_off;
   uint64_t remaining_plain;
   int finished;
   int eof;
@@ -485,19 +494,34 @@ int ef_decrypt_update(EfDecryptCtx *ctx, uint8_t *out, size_t out_cap, size_t *o
   }
   *out_len = 0;
 
+  /* Serve already-decrypted buffered plaintext first. */
+  if (ctx->plain_buf_off < ctx->plain_buf_len) {
+    size_t avail = ctx->plain_buf_len - ctx->plain_buf_off;
+    size_t n = avail < out_cap ? avail : out_cap;
+    if (n == 0) {
+      return EF_OK;
+    }
+    memcpy(out, ctx->plain_buf + ctx->plain_buf_off, n);
+    ctx->plain_buf_off += n;
+    *out_len = n;
+    return EF_OK;
+  }
+
   if (ctx->remaining_plain == 0) {
     ctx->eof = 1;
     return EF_OK;
   }
 
+  /* Read one full ciphertext chunk as stored on disk (chunk_size) and decrypt
+   * it into the internal buffer, then hand out whatever fits in `out`. This
+   * keeps chunk-boundary alignment with the encrypted stream even when the
+   * caller requests smaller buffers (e.g. the stream chunk-size override). */
   size_t want = ctx->chunk_size;
   if ((uint64_t)want > ctx->remaining_plain) {
     want = (size_t)ctx->remaining_plain;
   }
-  if (want > out_cap) {
-    want = out_cap;
-  }
   if (want == 0) {
+    ctx->eof = 1;
     return EF_OK;
   }
 
@@ -509,13 +533,22 @@ int ef_decrypt_update(EfDecryptCtx *ctx, uint8_t *out, size_t out_cap, size_t *o
     return EF_ERR_IO;
   }
 
-  if (crypto_aead_read(&ctx->aead, out, mac, NULL, 0, ctx->cipher_buf, want) != 0) {
-    ef_secure_wipe(out, want);
+  if (crypto_aead_read(&ctx->aead, ctx->plain_buf, mac, NULL, 0,
+                       ctx->cipher_buf, want) != 0) {
+    ef_secure_wipe(ctx->plain_buf, want);
     return EF_ERR_AUTH;
   }
-
   ctx->remaining_plain -= want;
-  *out_len = want;
+  ctx->plain_buf_len = want;
+  ctx->plain_buf_off = 0;
+
+  size_t n = want < out_cap ? want : out_cap;
+  if (n == 0) {
+    return EF_OK;
+  }
+  memcpy(out, ctx->plain_buf, n);
+  ctx->plain_buf_off = n;
+  *out_len = n;
   return EF_OK;
 }
 

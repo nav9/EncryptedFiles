@@ -133,9 +133,6 @@ class _FileActionsSheetState extends State<FileActionsSheet> {
 
   Future<void> _moveCopyDialog(BuildContext context,
       {required bool copy}) async {
-    // Let user pick: null = root, or a folder id.
-    String? chosenFolderId = widget.fileRef.folderId;
-
     final choice = await showDialog<String?>(
       context: context,
       builder: (ctx) => _FolderPickerDialog(
@@ -150,6 +147,7 @@ class _FileActionsSheetState extends State<FileActionsSheet> {
                   parentId: null,
                   sortIndex: 0,
                   createdAt: DateTime.now(),
+                  modifiedAt: DateTime.now(),
                   name: '/ Root',
                 ),
                 ...widget.folders

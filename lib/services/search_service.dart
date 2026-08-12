@@ -1,7 +1,5 @@
 import 'dart:io';
-import 'dart:typed_data';
 
-import 'package:encrypted_files/core/constants.dart';
 import 'package:encrypted_files/core/exceptions.dart';
 import 'package:encrypted_files/crypto/crypto_service.dart';
 import 'package:encrypted_files/crypto/native_bindings.dart';
@@ -51,7 +49,6 @@ class SearchService {
     void Function(String path)? onFile,
     bool autoRegister = false,
     String? destFolderId,
-    String? appRoot,
   }) async {
     final session = passwordVault.active;
     if (session == null) throw EfAuthException('No active password session');
@@ -83,25 +80,11 @@ class SearchService {
           continue;
         }
 
-        // Check if it belongs to this password by comparing blind tag.
-        final fileSalt = probe.salt;
-        final kdf = probe.kdf;
-        if (fileSalt == null || kdf == null) continue;
-
-        final fileKeys = crypto.deriveFromPassword(
-          '', // We need the actual password — but we only have derived keys.
-          // Instead, use the enc_key to try decrypting the header.
-          fileSalt,
-          kdf: kdf,
-        );
-        // Actually: we skip re-deriving from password here since we don't have
-        // the raw password. Instead attempt to match the blind tag in the file
-        // header against our current session's blind tag fingerprint.
-        fileKeys.wipe();
-
-        // Use the probe blind tag and compare with a "known good" method.
-        // The probe file_blind_tag is HMAC(blindKey, fileId).
-        // We can't verify without the fileId, so we just list all new EF files.
+        // Check if it belongs to this password by attempting to decrypt the
+        // (small) encrypted header — fast and does not touch the payload.
+        if (!crypto.verifyFileBelongs(path, session.keys)) {
+          continue;
+        }
         newFiles.add(path);
       } catch (e) {
         debugPrint('SearchService: error probing $path: $e');
@@ -109,7 +92,7 @@ class SearchService {
     }
 
     if (autoRegister && newFiles.isNotEmpty) {
-      await _registerNewFiles(newFiles, session, destFolderId, appRoot);
+      await _registerNewFiles(newFiles, session, destFolderId);
     }
 
     await logs.info(
@@ -123,49 +106,35 @@ class SearchService {
     List<String> paths,
     ActiveSession session,
     String? folderId,
-    String? appRoot,
   ) async {
     for (final path in paths) {
       try {
-        final probe = crypto.probe(path);
-        if (!probe.isEncryptedFile || probe.salt == null) continue;
+        // Reading the encrypted header both proves ownership and recovers the
+        // real name, MIME type and size stored inside it.
+        final header = crypto.decryptHeader(path, session.keys);
+        if (header == null) continue;
 
-        // Try decrypting header with current enc key to get real name & mime.
-        // If decryption succeeds, it belongs to this password.
-        // We use a 0-byte output path trick — just probe decrypt_begin.
-        // The C-level ef_decrypt_begin validates the header MAC.
-        // We pass a temp output file to decrypt_file just for the header.
-        final tempOut = '$path.tmp_probe';
-        try {
-          await crypto.decryptFile(
-            inputPath: path,
-            outputPath: tempOut,
-            keys: session.keys,
-          );
-          // If we got here, it belongs to this vault.
-          // Re-probe the file for metadata.
-          final fileStat = await File(path).stat();
-          final now = DateTime.now().toUtc();
-          final ref = EncryptedFileRef(
-            id: crypto.newFileId(),
-            vaultId: session.vault.id,
-            diskPath: path,
-            fakeName: p.basename(path),
-            realNameEncrypted: Uint8List(0), // placeholder
-            mimeEncrypted: Uint8List(0),
-            fileBlindTag: Uint8List.fromList(probe.fileBlindTag ?? []),
-            sizeBytes: fileStat.size,
-            folderId: folderId,
-            sortIndex: 0,
-            createdAt: fileStat.modified.toUtc(),
-            modifiedAt: now,
-          );
-          await database.insertFileRef(ref);
-        } finally {
-          try {
-            await File(tempOut).delete();
-          } catch (_) {}
-        }
+        final fileStat = await File(path).stat();
+        final now = DateTime.now().toUtc();
+        final ref = EncryptedFileRef(
+          id: crypto.newFileId(),
+          vaultId: session.vault.id,
+          diskPath: path,
+          fakeName: p.basename(path),
+          realNameEncrypted:
+              Uint8List.fromList(passwordVault.encryptMetadata(header.realName)),
+          mimeEncrypted:
+              Uint8List.fromList(passwordVault.encryptMetadata(header.mimeType)),
+          fileBlindTag: header.fileBlindTag,
+          sizeBytes: header.plaintextSize,
+          folderId: folderId,
+          sortIndex: 0,
+          createdAt: fileStat.modified.toUtc(),
+          modifiedAt: now,
+          realName: header.realName,
+          mimeType: header.mimeType,
+        );
+        await database.insertFileRef(ref);
       } catch (e) {
         debugPrint('SearchService._registerNewFiles: $path: $e');
       }

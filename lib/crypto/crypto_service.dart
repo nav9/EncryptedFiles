@@ -34,6 +34,20 @@ class DerivedKeys {
   }
 }
 
+class DecryptHeaderResult {
+  DecryptHeaderResult({
+    required this.realName,
+    required this.mimeType,
+    required this.plaintextSize,
+    required this.fileBlindTag,
+  });
+
+  final String realName;
+  final String mimeType;
+  final int plaintextSize;
+  final Uint8List fileBlindTag;
+}
+
 class ProbeResult {
   ProbeResult({
     required this.isEncryptedFile,
@@ -164,6 +178,76 @@ class CryptoService {
       malloc.free(blindPtr);
       malloc.free(idPtr);
       malloc.free(outPtr);
+    }
+  }
+
+  /// Verifies that [path] is an EncryptedFiles file belonging to [keys] by
+  /// attempting to decrypt its (small) encrypted header — without touching the
+  /// file payload. Returns true if the file belongs to this password.
+  bool verifyFileBelongs(String path, DerivedKeys keys) {
+    final pathPtr = path.toNativeUtf8();
+    final blindPtr = _bindings.bytesToNative(keys.blind.bytes);
+    final encPtr = _bindings.bytesToNative(keys.enc.bytes);
+    try {
+      final rc = _bindings.verifyFileBlind(pathPtr, blindPtr, encPtr);
+      return rc == 0;
+    } catch (_) {
+      return false;
+    } finally {
+      malloc.free(pathPtr);
+      _bindings.wipeAndFree(blindPtr, AppConstants.keySize);
+      _bindings.wipeAndFree(encPtr, AppConstants.keySize);
+    }
+  }
+
+  /// Opens the encrypted file at [path] and reads its header metadata (real
+  /// name, MIME type, plaintext size, blind tag) without decrypting the
+  /// payload. Returns null if the file is not an EncryptedFiles file or does
+  /// not belong to [keys].
+  DecryptHeaderResult? decryptHeader(String path, DerivedKeys keys) {
+    final pathPtr = path.toNativeUtf8();
+    final encPtr = _bindings.bytesToNative(keys.enc.bytes);
+    final chunkPtr = malloc<Uint32>();
+    final namePtr = malloc<Uint8>(512).cast<Utf8>();
+    final mimePtr = malloc<Uint8>(128).cast<Utf8>();
+    final sizePtr = malloc<Uint64>();
+    final tagPtr = malloc<Uint8>(AppConstants.blindSize);
+    Pointer<Void> ctx = nullptr;
+    try {
+      ctx = _bindings.decryptBegin(
+        pathPtr,
+        encPtr,
+        chunkPtr,
+        namePtr,
+        512,
+        mimePtr,
+        128,
+        sizePtr,
+        tagPtr,
+      );
+      if (ctx == nullptr) {
+        return null;
+      }
+      final name = namePtr.toDartString();
+      final mime = mimePtr.toDartString();
+      return DecryptHeaderResult(
+        realName: name,
+        mimeType: mime,
+        plaintextSize: sizePtr.value,
+        fileBlindTag:
+            Uint8List.fromList(tagPtr.asTypedList(AppConstants.blindSize)),
+      );
+    } finally {
+      if (ctx != nullptr) {
+        _bindings.decryptAbort(ctx);
+      }
+      malloc.free(pathPtr);
+      _bindings.wipeAndFree(encPtr, AppConstants.keySize);
+      malloc.free(chunkPtr);
+      malloc.free(namePtr);
+      malloc.free(mimePtr);
+      malloc.free(sizePtr);
+      malloc.free(tagPtr);
     }
   }
 

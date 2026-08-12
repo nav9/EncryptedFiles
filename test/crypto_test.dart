@@ -188,7 +188,7 @@ void main() {
 
   // ─── MediaKind detection via EncryptedFileRef ─────────────────────────
   group('EncryptedFileRef.mediaKind', () {
-    EncryptedFileRef _makeRef({String? mime, String? realName}) {
+    EncryptedFileRef makeRef({String? mime, String? realName}) {
       return EncryptedFileRef(
         id: 'test-id',
         vaultId: 'v1',
@@ -208,58 +208,58 @@ void main() {
     }
 
     test('image by mime', () {
-      expect(_makeRef(mime: 'image/png').mediaKind, MediaKind.image);
-      expect(_makeRef(mime: 'image/webp').mediaKind, MediaKind.image);
+      expect(makeRef(mime: 'image/png').mediaKind, MediaKind.image);
+      expect(makeRef(mime: 'image/webp').mediaKind, MediaKind.image);
     });
 
     test('image by extension', () {
-      expect(_makeRef(realName: 'photo.jpg').mediaKind, MediaKind.image);
-      expect(_makeRef(realName: 'photo.jpeg').mediaKind, MediaKind.image);
-      expect(_makeRef(realName: 'photo.gif').mediaKind, MediaKind.image);
-      expect(_makeRef(realName: 'photo.bmp').mediaKind, MediaKind.image);
-      expect(_makeRef(realName: 'photo.webp').mediaKind, MediaKind.image);
+      expect(makeRef(realName: 'photo.jpg').mediaKind, MediaKind.image);
+      expect(makeRef(realName: 'photo.jpeg').mediaKind, MediaKind.image);
+      expect(makeRef(realName: 'photo.gif').mediaKind, MediaKind.image);
+      expect(makeRef(realName: 'photo.bmp').mediaKind, MediaKind.image);
+      expect(makeRef(realName: 'photo.webp').mediaKind, MediaKind.image);
     });
 
     test('audio by mime', () {
-      expect(_makeRef(mime: 'audio/mp3').mediaKind, MediaKind.audio);
-      expect(_makeRef(mime: 'audio/flac').mediaKind, MediaKind.audio);
+      expect(makeRef(mime: 'audio/mp3').mediaKind, MediaKind.audio);
+      expect(makeRef(mime: 'audio/flac').mediaKind, MediaKind.audio);
     });
 
     test('audio by extension', () {
-      expect(_makeRef(realName: 'track.mp3').mediaKind, MediaKind.audio);
-      expect(_makeRef(realName: 'track.wav').mediaKind, MediaKind.audio);
-      expect(_makeRef(realName: 'track.m4a').mediaKind, MediaKind.audio);
-      expect(_makeRef(realName: 'track.ogg').mediaKind, MediaKind.audio);
-      expect(_makeRef(realName: 'track.flac').mediaKind, MediaKind.audio);
+      expect(makeRef(realName: 'track.mp3').mediaKind, MediaKind.audio);
+      expect(makeRef(realName: 'track.wav').mediaKind, MediaKind.audio);
+      expect(makeRef(realName: 'track.m4a').mediaKind, MediaKind.audio);
+      expect(makeRef(realName: 'track.ogg').mediaKind, MediaKind.audio);
+      expect(makeRef(realName: 'track.flac').mediaKind, MediaKind.audio);
     });
 
     test('video by mime', () {
-      expect(_makeRef(mime: 'video/mp4').mediaKind, MediaKind.video);
-      expect(_makeRef(mime: 'video/webm').mediaKind, MediaKind.video);
+      expect(makeRef(mime: 'video/mp4').mediaKind, MediaKind.video);
+      expect(makeRef(mime: 'video/webm').mediaKind, MediaKind.video);
     });
 
     test('video by extension', () {
-      expect(_makeRef(realName: 'clip.mp4').mediaKind, MediaKind.video);
-      expect(_makeRef(realName: 'clip.mkv').mediaKind, MediaKind.video);
-      expect(_makeRef(realName: 'clip.avi').mediaKind, MediaKind.video);
-      expect(_makeRef(realName: 'clip.mov').mediaKind, MediaKind.video);
+      expect(makeRef(realName: 'clip.mp4').mediaKind, MediaKind.video);
+      expect(makeRef(realName: 'clip.mkv').mediaKind, MediaKind.video);
+      expect(makeRef(realName: 'clip.avi').mediaKind, MediaKind.video);
+      expect(makeRef(realName: 'clip.mov').mediaKind, MediaKind.video);
     });
 
     test('document by mime', () {
-      expect(_makeRef(mime: 'application/pdf').mediaKind, MediaKind.document);
-      expect(_makeRef(mime: 'text/plain').mediaKind, MediaKind.document);
+      expect(makeRef(mime: 'application/pdf').mediaKind, MediaKind.document);
+      expect(makeRef(mime: 'text/plain').mediaKind, MediaKind.document);
     });
 
     test('document by extension', () {
-      expect(_makeRef(realName: 'doc.pdf').mediaKind, MediaKind.document);
-      expect(_makeRef(realName: 'doc.txt').mediaKind, MediaKind.document);
-      expect(_makeRef(realName: 'doc.doc').mediaKind, MediaKind.document);
-      expect(_makeRef(realName: 'doc.xls').mediaKind, MediaKind.document);
+      expect(makeRef(realName: 'doc.pdf').mediaKind, MediaKind.document);
+      expect(makeRef(realName: 'doc.txt').mediaKind, MediaKind.document);
+      expect(makeRef(realName: 'doc.doc').mediaKind, MediaKind.document);
+      expect(makeRef(realName: 'doc.xls').mediaKind, MediaKind.document);
     });
 
     test('other for unknown', () {
-      expect(_makeRef(realName: 'archive.zip').mediaKind, MediaKind.other);
-      expect(_makeRef(mime: 'application/octet-stream').mediaKind, MediaKind.other);
+      expect(makeRef(realName: 'archive.zip').mediaKind, MediaKind.other);
+      expect(makeRef(mime: 'application/octet-stream').mediaKind, MediaKind.other);
     });
   });
 
@@ -359,6 +359,7 @@ void main() {
         parentId: null,
         sortIndex: 0,
         createdAt: now,
+        modifiedAt: now,
         name: 'Photos',
       );
 
@@ -380,6 +381,7 @@ void main() {
         parentId: null,
         sortIndex: 0,
         createdAt: DateTime.now(),
+        modifiedAt: DateTime.now(),
         name: 'Old Name',
         fileCount: 5,
       );

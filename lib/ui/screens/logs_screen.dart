@@ -1,7 +1,6 @@
 import 'package:encrypted_files/core/constants.dart';
 import 'package:encrypted_files/core/di.dart';
 import 'package:encrypted_files/database/models/log_entry.dart';
-import 'package:encrypted_files/ui/providers/app_state.dart';
 import 'package:encrypted_files/ui/widgets/lock_all_button.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -44,9 +43,20 @@ class _LogsScreenState extends State<LogsScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        leadingWidth: 96,
+        leading: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const LockAllButton(),
+            IconButton(
+              icon: const Icon(Icons.arrow_back),
+              tooltip: 'Back',
+              onPressed: () => Navigator.pop(context),
+            ),
+          ],
+        ),
         title: const Text('Logs'),
         actions: [
-          const LockAllButton(),
           PopupMenuButton<LogLevel?>(
             icon: const Icon(Icons.filter_list),
             tooltip: 'Filter',
